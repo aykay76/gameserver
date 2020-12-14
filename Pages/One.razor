@@ -1,0 +1,137 @@
+﻿@page "/one"
+
+@using Microsoft.AspNetCore.SignalR.Client
+@using gameserver.Data
+@using gameserver.Services
+@inject NavigationManager NavigationManager
+
+<h1>One Game</h1>
+
+<p>Enter your name and join:</p>
+<input type="text" maxlength="32" @bind="@username" />
+<button type="button" @onclick="@JoinGame"><span class="oi" aria-hidden="true"></span>Join!</button>
+
+@if (players == null)
+{
+    <p><em>Waiting for others to join...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var player in players)
+            {
+                <tr>
+                    <td>@player.Name</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+<button type="button" @onclick="@StartGame"><span class="oi oi-play" aria-hidden="true"></span>Start!</button>
+
+@if (cards == null)
+{
+    <p><em>Waiting for cards...</em></p>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Colour</th>
+                <th>Name</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var card in cards)
+            {
+                <tr>
+                    <td>@card.Colour</td>
+                    <td>@card.Name</td>
+                    <td>@card.Value</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (discard == null)
+{
+    <p><em>Discard pile empty...</em></p>
+}
+else
+{
+    <h2>Discard</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Colour</th>
+                <th>Name</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+        <tbody>
+            <tr>
+                <td>@discard.Colour</td>
+                <td>@discard.Name</td>
+                <td>@discard.Value</td>
+            </tr>
+        </tbody>
+    </table>
+}
+
+@code {
+    private string username;
+    private HubConnection hubConnection;
+    private List<Player> players;
+    private List<Card> cards;
+    private Card discard;
+
+    protected override async Task OnInitializedAsync()
+    {
+        hubConnection = new HubConnectionBuilder()
+            .WithUrl(NavigationManager.ToAbsoluteUri("/onesignal"))
+            .Build();
+
+        hubConnection.On<Card>("HaveCard", (card) =>
+        {
+            if (cards == null) cards = new List<Card>();
+            cards.Add(card);
+            StateHasChanged();
+        });
+
+        hubConnection.On<Card>("CardDiscarded", (card) =>
+        {
+            discard = card;
+            StateHasChanged();
+        });
+
+        hubConnection.On<List<Player>>("PlayerList", (allPlayers) =>
+        {
+            Console.WriteLine("Player joined");
+            players = new List<Player>();
+            players.AddRange(allPlayers);
+            StateHasChanged();
+        });
+
+        await hubConnection.StartAsync();
+    }
+
+    private async Task JoinGame()
+    {
+        await hubConnection.SendAsync("JoinGame", username);
+    }
+
+    private async Task StartGame()
+    {
+        await hubConnection.SendAsync("StartGame");
+    }
+}
