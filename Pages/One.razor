@@ -42,25 +42,10 @@ else
 }
 else
 {
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Colour</th>
-                <th>Name</th>
-                <th>Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach (var card in cards)
-            {
-                <tr>
-                    <td>@card.Colour</td>
-                    <td>@card.Name</td>
-                    <td>@card.Value</td>
-                </tr>
-            }
-        </tbody>
-    </table>
+    @foreach (var card in cards)
+    {
+        <button type="button" @onclick="() => PlayCard(card)">@card.Name</button>
+    }
 }
 
 @if (discard == null)
@@ -133,5 +118,15 @@ else
     private async Task StartGame()
     {
         await hubConnection.SendAsync("StartGame");
+    }
+
+    private async Task PlayCard(Card card)
+    {
+        // remove card from hand
+        cards.Remove(card);
+
+        await hubConnection.SendAsync("PlayCard", card);
+
+        StateHasChanged();
     }
 }
