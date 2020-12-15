@@ -3,7 +3,7 @@
     "windowsAuthentication": false,
     "anonymousAuthentication": true,
     "iisExpress": {
-      "applicationUrl": "http://Alans-Macbook:21635",
+      "applicationUrl": "http://hulk:21635",
       "sslPort": 44327
     }
   },
@@ -19,7 +19,7 @@
       "commandName": "Project",
       "dotnetRunMessages": "true",
       "launchBrowser": true,
-      "applicationUrl": "http://Alans-Macbook:5000",
+      "applicationUrl": "http://hulk:5000",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

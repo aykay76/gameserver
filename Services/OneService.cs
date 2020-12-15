@@ -9,46 +9,47 @@ namespace gameserver.Services
 {
     public class OneService : Hub
     {
-        private List<Player> Players { get; set; }
-        private List<Card> Deck { get; set; }
-        private Stack<Card> Discard { get; set; }
+        private List<Player> players;
+        private List<Card> deck;
+        private Stack<Card> discardPile;
+        private int currentPlayer;
 
         public OneService()
         {
             string[] colours = new string[4] { "Red", "Blue", "Green", "Yellow" };
 
-            Players = new List<Player>();
-            Deck = new List<Card>();
-            Discard = new Stack<Card>();
+            players = new List<Player>();
+            deck = new List<Card>();
+            discardPile = new Stack<Card>();
 
             for (int i = 0; i < 4; i++)
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    Deck.Add(new Card {  Name = "Reverse", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "Reverse", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    Deck.Add(new Card {  Name = "Skip", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "Skip", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    Deck.Add(new Card {  Name = "Draw Two", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "Draw Two", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
             {
-                Deck.Add(new Card { Name = "Wild", Value = 10, Colour = "Wild" });
+                deck.Add(new Card { Name = "Wild", Value = 10, Colour = "Wild" });
             }
             for (int i = 0; i < 4; i++)
             {
-                Deck.Add(new Card { Name = "Draw Four", Value = 10, Colour = "Wild" });
+                deck.Add(new Card { Name = "Draw Four", Value = 10, Colour = "Wild" });
             }
             for (int c = 0; c < 4; c++)
             {
@@ -56,19 +57,19 @@ namespace gameserver.Services
                 {
                     for (int j = 0; j < 2; j++)
                     {
-                        Deck.Add(new Card { Name = $"{i}", Value = i, Colour = colours[c] });
+                        deck.Add(new Card { Name = $"{i}", Value = i, Colour = colours[c] });
                     }
                 }
             }
 
-            int count = Deck.Count;
+            int count = deck.Count;
             Random r = new Random(DateTime.Now.Millisecond);
             for (int i = 0; i < 1000; i++)
             {
                 int j = r.Next(0, count - 1);
-                Card c = Deck.ElementAt(j);
-                Deck.RemoveAt(j);
-                Deck.Add(c);
+                Card c = deck.ElementAt(j);
+                deck.RemoveAt(j);
+                deck.Add(c);
             }
             Console.WriteLine("Shuffled, ready to go");
         }
@@ -90,9 +91,11 @@ namespace gameserver.Services
             Player player = new Player();
             player.Name = name;
             player.SetClient(Clients.Caller);
-            Players.Add(player);
+            players.Add(player);
 
-            await Clients.All.SendAsync("PlayerList", Players);
+            currentPlayer = 0;
+
+            await Clients.All.SendAsync("PlayerList", players);
         }
 
         public async Task StartGame()
@@ -100,21 +103,45 @@ namespace gameserver.Services
             // deal some cards
             for (int i = 0; i < 6; i++)
             {
-                foreach (Player player in Players)
+                foreach (Player player in players)
                 {
-                    Card card = Deck.ElementAt(0);
-                    Deck.RemoveAt(0);
+                    Card card = deck.ElementAt(0);
+                    deck.RemoveAt(0);
                     await player.GetClient().SendAsync("HaveCard", card);
                 }
             }
 
             // turn over first card
-            Card discard = Deck.ElementAt(0);
-            Deck.RemoveAt(0);
-            Discard.Push(discard);
+            Card discard = deck.ElementAt(0);
+            deck.RemoveAt(0);
+            discardPile.Push(discard);
             await Clients.All.SendAsync("CardDiscarded", discard);
 
             // notify first player their go
+            await players[currentPlayer].GetClient().SendAsync("YourTurn");
+        }
+
+        public async Task PickupCard()
+        {
+            // send the top card from the deck to the player
+            Card top = deck.ElementAt(0);
+            deck.RemoveAt(0);
+            await players[currentPlayer].GetClient().SendAsync("HaveCard", top);
+
+            // next player go
+            currentPlayer = (currentPlayer + 1) % players.Count;
+            await players[currentPlayer].GetClient().SendAsync("YourTurn");
+        }
+
+        public async Task PlayCard(Card card)
+        {
+            // tell everyone the card was discarded
+            discardPile.Push(card);
+            await Clients.All.SendAsync("CardDiscarded", card);
+
+            // next player go
+            currentPlayer = (currentPlayer + 1) % players.Count;
+            await players[currentPlayer].GetClient().SendAsync("YourTurn");
         }
     }
 }
