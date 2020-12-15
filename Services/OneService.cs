@@ -13,6 +13,7 @@ namespace gameserver.Services
         private List<Card> deck;
         private Stack<Card> discardPile;
         private int currentPlayer;
+        private bool started = false;
 
         public OneService()
         {
@@ -100,6 +101,11 @@ namespace gameserver.Services
 
         public async Task StartGame()
         {
+            if (started) return;
+            else started = true;
+
+            await Clients.All.SendAsync("GameStarted", card);
+
             // deal some cards
             for (int i = 0; i < 6; i++)
             {

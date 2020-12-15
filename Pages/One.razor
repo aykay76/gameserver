@@ -94,6 +94,12 @@ else
             .WithUrl(NavigationManager.ToAbsoluteUri("/onesignal"))
             .Build();
 
+        hubConnection.On("GameStarted", () =>
+        {
+            started = true;
+            StateHasChanged();
+        });
+
         hubConnection.On("YourTurn", () =>
         {
             notMyTurn = false;
@@ -135,7 +141,6 @@ else
 
     private async Task StartGame()
     {
-        started = true;
         await hubConnection.SendAsync("StartGame");
         StateHasChanged();
     }
