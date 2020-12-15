@@ -7,9 +7,12 @@
 
 <h1>One Game</h1>
 
-<p>Enter your name and join:</p>
-<input type="text" maxlength="32" @bind="@username" />
-<button type="button" @onclick="@JoinGame"><span class="oi" aria-hidden="true"></span>Join!</button>
+@if (!joined)
+{
+    <p>Enter your name and join:</p>
+    <input type="text" maxlength="32" @bind="@username" />
+    <button type="button" @onclick="@JoinGame"><span class="oi" aria-hidden="true"></span>Join!</button>
+}
 
 @if (players == null)
 {
@@ -27,7 +30,7 @@ else
             @foreach (var player in players)
             {
                 <tr>
-                    <td>@player.Name</td>
+                    <td>@player.Name (@player.Score)</td>
                 </tr>
             }
         </tbody>
@@ -47,35 +50,47 @@ else
 {
     @foreach (var card in cards)
     {
-        <button class="gamecard" type="button" @onclick="() => PlayCard(card)" disabled="@notMyTurn">@card.Colour @card.Name</button>
+        <button class="gamecard @card.Colour.ToLower()" type="button" @onclick="() => PlayCard(card)" disabled="@notMyTurn">@card.Colour @card.Name</button>
     }
 }
 
-<button class="gamecard" type="button" @onclick="PickupCard" disabled="@notMyTurn">Pick Up</button>
+<div class="piles">
+    <button class="gamecard" type="button" @onclick="PickupCard" disabled="@notMyTurn">Pick Up</button>
 
-@if (discard == null)
+    @if (discard == null)
+    {
+        <button class="gamecard" type="button" disabled="true"></button>
+    }
+    else
+    {
+        <button class="gamecard @discard.Colour.ToLower()" type="button" disabled="true">@discard.Colour @discard.Name</button>
+    }
+</div>
+
+@if (choosingColour)
 {
-    <p><em>Discard pile empty...</em></p>
-}
-else
-{
-    <h2>Discard</h2>
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Colour</th>
-                <th>Name</th>
-                <th>Value</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-                <td>@discard.Colour</td>
-                <td>@discard.Name</td>
-                <td>@discard.Value</td>
-            </tr>
-        </tbody>
-    </table>
+<div class="modal fade show" tabindex="-1" role="dialog" style="display: block; padding-right: 17px;">
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Choose Colour</h5>
+        <button type="button" class="close" data-dismiss="modal" aria-label="Close">
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <button class="gamecard red" type="button" @onclick='() => ChooseColour("Red")'>Red</button>
+        <button class="gamecard yellow" type="button" @onclick='() => ChooseColour("Yellow")'>Yellow</button>
+        <button class="gamecard green" type="button" @onclick='() => ChooseColour("Green")'>Green</button>
+        <button class="gamecard blue" type="button" @onclick='() => ChooseColour("Blue")'>Blue</button>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary">Save changes</button>
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button>
+      </div>
+    </div>
+  </div>
+</div>    
 }
 
 @code {
@@ -87,6 +102,11 @@ else
     private List<Player> players;
     private List<Card> cards;
     private Card discard;
+    private Player me;
+    private Player activePlayer;
+    private Card chosenCard;
+    bool choosingColour = false;
+    string chosenColour = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -100,9 +120,15 @@ else
             StateHasChanged();
         });
 
-        hubConnection.On("YourTurn", () =>
+        hubConnection.On<Player>("ActivePlayer", (player) =>
         {
-            notMyTurn = false;
+            if (me.Name == player.Name)
+            {
+                notMyTurn = false;
+            }
+
+            activePlayer = player;
+
             StateHasChanged();
         });
 
@@ -115,10 +141,17 @@ else
             StateHasChanged();
         });
 
-        hubConnection.On<Card>("CardDiscarded", (card) =>
+        hubConnection.On<Card, string>("CardDiscarded", (card, colourOverride) =>
         {
+            // TODO: handle the colour override
             discard = card;
+            discard.Colour = colourOverride;
             StateHasChanged();
+        });
+
+        hubConnection.On<Player>("YouAre", (player) => 
+        {
+            me = player;
         });
 
         hubConnection.On<List<Player>>("PlayerList", (allPlayers) =>
@@ -126,7 +159,29 @@ else
             Console.WriteLine("Player joined");
             players = new List<Player>();
             players.AddRange(allPlayers);
+
             StateHasChanged();
+        });
+
+        hubConnection.On<Player>("Winner", async (players) =>
+        {
+            int score = 0;
+
+            // TODO: output congrats, sending score...
+
+            foreach (var card in cards)
+            {
+                score += card.Value;
+            }
+
+            await hubConnection.SendAsync("Score", me, score);
+        });
+
+        hubConnection.On("GameOver", () => 
+        {
+            // TODO: perform full reset
+            started = false;
+            joined = false;
         });
 
         await hubConnection.StartAsync();
@@ -158,17 +213,39 @@ else
         // remove card from hand
         if (valid)
         {
-            notMyTurn = true;
+            if (card.Colour == "Wild")
+            {
+                chosenCard = card;
+                choosingColour = true;
+                StateHasChanged();
+            }
+            else
+            {
+                notMyTurn = true;
 
-            cards.Remove(card);
+                cards.Remove(card);
 
-            await hubConnection.SendAsync("PlayCard", card);
+                await hubConnection.SendAsync("PlayCard", card, card.Colour, cards.Count == 0);
 
-            StateHasChanged();
+                StateHasChanged();
+            }
         }
         else
         {
             // TODO: notify incorrect move
         }
+    }
+
+    private async Task ChooseColour(string colour)
+    {
+        choosingColour = false;
+
+        notMyTurn = true;
+
+        cards.Remove(chosenCard);
+
+        await hubConnection.SendAsync("PlayCard", chosenCard, colour, cards.Count == 0);
+
+        StateHasChanged();
     }
 }

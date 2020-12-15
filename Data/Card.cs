@@ -36,7 +36,7 @@ namespace gameserver.Data
                 else
                 {
                     // draw two, skip or reverse
-                    if (Colour == other.Colour)
+                    if (Colour == other.Colour || Name == other.Name)
                     {
                         valid = true;
                     }

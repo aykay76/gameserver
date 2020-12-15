@@ -5,6 +5,8 @@ using System.Threading.Tasks;
 using gameserver.Data;
 using Microsoft.AspNetCore.SignalR;
 
+// TODO: always assuming there are cards in the deck, if the deck is ever empty we need to reshuffle the discard pile and make that the deck
+
 namespace gameserver.Services
 {
     public class OneService : Hub
@@ -14,6 +16,8 @@ namespace gameserver.Services
         private Stack<Card> discardPile;
         private int currentPlayer;
         private bool started = false;
+        private bool forward = true;
+        private int scores = 0;
 
         public OneService()
         {
@@ -41,16 +45,16 @@ namespace gameserver.Services
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    deck.Add(new Card {  Name = "Draw Two", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "+2", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
             {
-                deck.Add(new Card { Name = "Wild", Value = 10, Colour = "Wild" });
+                deck.Add(new Card { Name = "Card", Value = 10, Colour = "Wild" });
             }
             for (int i = 0; i < 4; i++)
             {
-                deck.Add(new Card { Name = "Draw Four", Value = 10, Colour = "Wild" });
+                deck.Add(new Card { Name = "+4", Value = 10, Colour = "Wild" });
             }
             for (int c = 0; c < 4; c++)
             {
@@ -94,7 +98,7 @@ namespace gameserver.Services
             player.SetClient(Clients.Caller);
             players.Add(player);
 
-            currentPlayer = 0;
+            await Clients.Caller.SendAsync("YouAre", player);
 
             await Clients.All.SendAsync("PlayerList", players);
         }
@@ -104,7 +108,10 @@ namespace gameserver.Services
             if (started) return;
             else started = true;
 
-            await Clients.All.SendAsync("GameStarted", card);
+            scores = 0;
+            currentPlayer = 0;
+
+            await Clients.All.SendAsync("GameStarted");
 
             // deal some cards
             for (int i = 0; i < 6; i++)
@@ -117,14 +124,27 @@ namespace gameserver.Services
                 }
             }
 
-            // turn over first card
+            // turn over first card - if it's a wildcard, choose a random colour?
             Card discard = deck.ElementAt(0);
             deck.RemoveAt(0);
             discardPile.Push(discard);
             await Clients.All.SendAsync("CardDiscarded", discard);
 
             // notify first player their go
-            await players[currentPlayer].GetClient().SendAsync("YourTurn");
+            await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
+        }
+
+        private void NextPlayer()
+        {
+            if (forward)
+            {
+                currentPlayer = (currentPlayer + 1) % players.Count;
+            }
+            else
+            {
+                currentPlayer--;
+                if (currentPlayer < 0) currentPlayer = players.Count - 1;
+            }
         }
 
         public async Task PickupCard()
@@ -135,19 +155,67 @@ namespace gameserver.Services
             await players[currentPlayer].GetClient().SendAsync("HaveCard", top);
 
             // next player go
-            currentPlayer = (currentPlayer + 1) % players.Count;
-            await players[currentPlayer].GetClient().SendAsync("YourTurn");
+            NextPlayer();
+            await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
         }
 
-        public async Task PlayCard(Card card)
+        public async Task PlayCard(Card card, string colourOverride, bool lastCard)
         {
-            // tell everyone the card was discarded
-            discardPile.Push(card);
-            await Clients.All.SendAsync("CardDiscarded", card);
+            if (lastCard)
+            {
+                await Clients.All.SendAsync("Winner", players[currentPlayer]);
+            }
+            else
+            {
+                // tell everyone the card was discarded
+                discardPile.Push(card);
+                await Clients.All.SendAsync("CardDiscarded", card, colourOverride);
 
-            // next player go
-            currentPlayer = (currentPlayer + 1) % players.Count;
-            await players[currentPlayer].GetClient().SendAsync("YourTurn");
+                if (card.Name == "Skip")
+                {
+                    NextPlayer();
+                }
+                else if (card.Name == "Reverse")
+                {
+                    forward = !forward;
+                }
+
+                // next player go
+                NextPlayer();
+
+                if (card.Name == "+2")
+                {
+                    for (int i = 0; i < 2; i++)
+                    {
+                        Card top = deck.ElementAt(0);
+                        deck.RemoveAt(0);
+                        await players[currentPlayer].GetClient().SendAsync("HaveCard", top);
+                    }
+                }
+                if (card.Name == "+4")
+                {
+                    for (int i = 0; i < 4; i++)
+                    {
+                        Card top = deck.ElementAt(0);
+                        deck.RemoveAt(0);
+                        await players[currentPlayer].GetClient().SendAsync("HaveCard", top);
+                    }
+                }
+                
+                await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
+            }
+        }
+
+        public async Task Score(Player player, int score)
+        {
+            player.Score += score;
+
+            scores++;
+
+            if (scores == players.Count)
+            {
+                await Clients.All.SendAsync("GameOver");
+            }
         }
     }
 }

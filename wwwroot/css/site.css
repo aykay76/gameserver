@@ -53,3 +53,30 @@ a, .btn-link {
         width: 1.5cm;
         height: 2.5cm;
     }
+
+    .gamecard.yellow {
+        background-color: yellow;
+    }
+    
+    .gamecard.blue {
+        background-color: blue;
+    }
+    
+    .gamecard.red {
+        background-color: red;
+    }
+    
+    .gamecard.green {
+        background-color: green;
+    }
+
+    .gamecard.wild {
+        background: linear-gradient(red, yellow, green, blue);
+        background: -webkit-linear-gradient(red, yellow, green, blue);
+        background: -o-linear-gradient((red, yellow, green, blue);
+        background: -moz-linear-gradient((red, yellow, green, blue);
+    }
+
+.piles {
+    vertical-align: top;
+}    
