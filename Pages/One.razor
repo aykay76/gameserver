@@ -47,7 +47,14 @@ else
 {
     @foreach (var card in cards)
     {
-        <button class="gamecard @card.Colour.ToLower()" type="button" @onclick="() => PlayCard(card)" disabled="@notMyTurn">@card.Name</button>
+        @if (notMyTurn)
+        {
+            <button class="gamecard" type="button" @onclick="() => PlayCard(card)" disabled="true">@card.Name</button>
+        }
+        else
+        {
+            <button class="gamecard @card.Colour.ToLower()" type="button" @onclick="() => PlayCard(card)">@card.Name</button>
+        }
     }
 }
 
@@ -62,6 +69,15 @@ else
     {
         <button class="gamecard @discard.Colour.ToLower()" type="button" disabled="true">@discard.Name</button>
     }
+</div>
+
+<div class="logs">
+    <ul>
+    @for (int i = 5; i >= 1; i--)
+    {
+        <li class="log" style="opacity: @(@i*20)%">@log[i-1]</li>
+    }
+    </ul>
 </div>
 
 @if (choosingColour)
@@ -97,10 +113,14 @@ else
     private Card chosenCard;
     bool choosingColour = false;
     string chosenColour = string.Empty;
+    private List<string> log;
 
     protected override async Task OnInitializedAsync()
     {
-        Console.WriteLine("Initialised");
+        log = new List<string>(5) { string.Empty,string.Empty, string.Empty, string.Empty,string.Empty};
+
+        log.Add("Initialised");
+        if (log.Count > 5) log.RemoveAt(0);
         
         hubConnection = new HubConnectionBuilder()
             .WithUrl(NavigationManager.ToAbsoluteUri("/onesignal"))
@@ -108,14 +128,16 @@ else
 
         hubConnection.On("GameStarted", () =>
         {
-            Console.WriteLine("Game has started");
+            log.Add("Game has started");
+            if (log.Count > 5) log.RemoveAt(0);
+
             started = true;
             StateHasChanged();
         });
 
         hubConnection.On<Player>("ActivePlayer", (player) =>
         {
-            Console.WriteLine($"Active player is {player.Name}");
+            if (log.Count > 5) log.RemoveAt(0);
 
             if (me.Name == player.Name)
             {
@@ -129,7 +151,8 @@ else
 
         hubConnection.On<Card>("HaveCard", (card) =>
         {
-            Console.WriteLine($"Got a card {card.Name}, {card.Colour}");
+            log.Add($"Got a card {card.Name}, {card.Colour}");
+            if (log.Count > 5) log.RemoveAt(0);
 
             if (cards == null) cards = new List<Card>();
             cards.Add(card);
@@ -138,7 +161,8 @@ else
 
         hubConnection.On<Card, string>("CardDiscarded", (card, colourOverride) =>
         {
-            Console.WriteLine($"Card discarded: {card.Name}, {card.Colour}, {colourOverride}");
+            log.Add($"Card discarded: {card.Name}, {card.Colour}, {colourOverride}");
+            if (log.Count > 5) log.RemoveAt(0);
             
             discard = card;
             discard.Colour = colourOverride;
@@ -147,14 +171,16 @@ else
 
         hubConnection.On<Player>("YouAre", (player) => 
         {
-            Console.WriteLine($"I am {player.Name}");
+            log.Add($"I am {player.Name}");
+            if (log.Count > 5) log.RemoveAt(0);
 
             me = player;
         });
 
         hubConnection.On<List<Player>>("PlayerList", (allPlayers) =>
         {
-            Console.WriteLine("Got list of players");
+            log.Add("Got list of players");
+            if (log.Count > 5) log.RemoveAt(0);
 
             players = new List<Player>();
             players.AddRange(allPlayers);
@@ -164,9 +190,10 @@ else
 
         hubConnection.On<Player>("Winner", async (players) =>
         {
-            int score = 0;
+            log.Add("We have a winner!");
+            if (log.Count > 5) log.RemoveAt(0);
 
-            // TODO: output congrats, sending score...
+            int score = 0;
 
             foreach (var card in cards)
             {
@@ -178,6 +205,9 @@ else
 
         hubConnection.On("ResetGame", () => 
         {
+            log.Add("Game reset, ready to start again.");
+            if (log.Count > 5) log.RemoveAt(0);
+
             started = false;
             discard = null;
             notMyTurn = true;
@@ -224,6 +254,9 @@ else
         {
             if (card.Colour == "Wild")
             {
+                log.Add("You need to choose a colour");
+                if (log.Count > 5) log.RemoveAt(0);
+
                 chosenCard = card;
                 choosingColour = true;
                 StateHasChanged();
