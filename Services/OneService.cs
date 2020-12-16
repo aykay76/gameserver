@@ -6,6 +6,7 @@ using gameserver.Data;
 using Microsoft.AspNetCore.SignalR;
 
 // TODO: always assuming there are cards in the deck, if the deck is ever empty we need to reshuffle the discard pile and make that the deck
+// TODO: if start with one player enter solitaire mode - either timed challenge or least moves to empty hand wins
 
 namespace gameserver.Services
 {
@@ -105,7 +106,7 @@ namespace gameserver.Services
             player.SetClient(Clients.Caller);
             players.Add(player);
 
-            Groups.AddToGroupAsync(Context.ConnectionId, "Players");
+            await Groups.AddToGroupAsync(Context.ConnectionId, "Players");
 
             await Clients.Caller.SendAsync("YouAre", player);
 

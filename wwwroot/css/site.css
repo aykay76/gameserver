@@ -60,19 +60,19 @@ a, .btn-link {
     }
 
     .gamecard.yellow {
-        background-color: yellow;
+        background: radial-gradient(white, yellow)
     }
     
     .gamecard.blue {
-        background-color: blue;
+        background: radial-gradient(white, blue)
     }
     
     .gamecard.red {
-        background-color: red;
+        background: radial-gradient(white, red)
     }
     
     .gamecard.green {
-        background-color: green;
+        background: radial-gradient(white, green)
     }
 
     .gamecard.wild {
