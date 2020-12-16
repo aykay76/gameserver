@@ -18,6 +18,12 @@ namespace gameserver.Data
         {
             bool valid = false;
 
+            if (other == null)
+            {
+                // first card played
+                return true;
+            }
+
             if (Value >= 0 && Value <= 9)
             {
                 // value cards only valid if value or colour matches
