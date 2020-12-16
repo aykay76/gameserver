@@ -21,24 +21,30 @@ namespace gameserver.Services
 
         public OneService()
         {
+            players = new List<Player>();
+            discardPile = new Stack<Card>();
+
+            InitialiseDeck();
+        }
+
+        private void InitialiseDeck()
+        {
             string[] colours = new string[4] { "Red", "Blue", "Green", "Yellow" };
 
-            players = new List<Player>();
             deck = new List<Card>();
-            discardPile = new Stack<Card>();
 
             for (int i = 0; i < 4; i++)
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    deck.Add(new Card {  Name = "Reverse", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "R", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
             {
                 for (int j = 0; j < 2; j++)
                 {
-                    deck.Add(new Card {  Name = "Skip", Value = 10, Colour = colours[i] });
+                    deck.Add(new Card {  Name = "S", Value = 10, Colour = colours[i] });
                 }
             }
             for (int i = 0; i < 4; i++)
@@ -50,7 +56,7 @@ namespace gameserver.Services
             }
             for (int i = 0; i < 4; i++)
             {
-                deck.Add(new Card { Name = "Card", Value = 10, Colour = "Wild" });
+                deck.Add(new Card { Name = "W", Value = 10, Colour = "Wild" });
             }
             for (int i = 0; i < 4; i++)
             {
@@ -76,7 +82,6 @@ namespace gameserver.Services
                 deck.RemoveAt(j);
                 deck.Add(c);
             }
-            Console.WriteLine("Shuffled, ready to go");
         }
 
         public override Task OnConnectedAsync()
@@ -93,14 +98,18 @@ namespace gameserver.Services
 
         public async Task JoinGame(string name)
         {
+            Console.WriteLine($"{name} joined the fun");
+
             Player player = new Player();
             player.Name = name;
             player.SetClient(Clients.Caller);
             players.Add(player);
 
+            Groups.AddToGroupAsync(Context.ConnectionId, "Players");
+
             await Clients.Caller.SendAsync("YouAre", player);
 
-            await Clients.All.SendAsync("PlayerList", players);
+            await Clients.Group("Players").SendAsync("PlayerList", players);
         }
 
         public async Task StartGame()
@@ -111,7 +120,7 @@ namespace gameserver.Services
             scores = 0;
             currentPlayer = 0;
 
-            await Clients.All.SendAsync("GameStarted");
+            await Clients.Group("Players").SendAsync("GameStarted");
 
             // deal some cards
             for (int i = 0; i < 6; i++)
@@ -125,13 +134,13 @@ namespace gameserver.Services
             }
 
             // turn over first card - if it's a wildcard, choose a random colour?
-            Card discard = deck.ElementAt(0);
-            deck.RemoveAt(0);
-            discardPile.Push(discard);
-            await Clients.All.SendAsync("CardDiscarded", discard);
+            // Card discard = deck.ElementAt(0);
+            // deck.RemoveAt(0);
+            // discardPile.Push(discard);
+            // await Clients.Group("Players").SendAsync("CardDiscarded", discard, discard.Colour);
 
             // notify first player their go
-            await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
+            await Clients.Group("Players").SendAsync("ActivePlayer", players[currentPlayer]);
         }
 
         private void NextPlayer()
@@ -155,27 +164,28 @@ namespace gameserver.Services
             await players[currentPlayer].GetClient().SendAsync("HaveCard", top);
 
             // next player go
+            // TODO: not necessarily, it could be that the current player could play the card they just picked up
             NextPlayer();
-            await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
+            await Clients.Group("Players").SendAsync("ActivePlayer", players[currentPlayer]);
         }
 
         public async Task PlayCard(Card card, string colourOverride, bool lastCard)
         {
             if (lastCard)
             {
-                await Clients.All.SendAsync("Winner", players[currentPlayer]);
+                await Clients.Group("Players").SendAsync("Winner", players[currentPlayer]);
             }
             else
             {
                 // tell everyone the card was discarded
                 discardPile.Push(card);
-                await Clients.All.SendAsync("CardDiscarded", card, colourOverride);
+                await Clients.Group("Players").SendAsync("CardDiscarded", card, colourOverride);
 
-                if (card.Name == "Skip")
+                if (card.Name == "S")
                 {
                     NextPlayer();
                 }
-                else if (card.Name == "Reverse")
+                else if (card.Name == "R")
                 {
                     forward = !forward;
                 }
@@ -202,20 +212,36 @@ namespace gameserver.Services
                     }
                 }
                 
-                await Clients.All.SendAsync("ActivePlayer", players[currentPlayer]);
+                await Clients.Group("Players").SendAsync("ActivePlayer", players[currentPlayer]);
             }
         }
 
         public async Task Score(Player player, int score)
         {
-            player.Score += score;
+            var match = players.Where(p => p.Name == player.Name).First();
+            if (match != null)
+            {
+                match.Score += score;
+            }
 
             scores++;
 
             if (scores == players.Count)
-            {
-                await Clients.All.SendAsync("GameOver");
+            {                
+                await Clients.Group("Players").SendAsync("PlayerList", players);
+
+                await ResetGame();
             }
+        }
+
+        public async Task ResetGame()
+        {
+            discardPile = new Stack<Card>();
+            started = false;
+
+            InitialiseDeck();
+
+            await Clients.Group("Players").SendAsync("ResetGame");
         }
     }
 }
