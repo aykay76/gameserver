@@ -74,6 +74,7 @@ namespace gameserver.Services
                 }
             }
 
+            // simple deck shuffle, for a large number of times, remove a random card and add it to the back of the deck
             int count = deck.Count;
             Random r = new Random(DateTime.Now.Millisecond);
             for (int i = 0; i < 1000; i++)
